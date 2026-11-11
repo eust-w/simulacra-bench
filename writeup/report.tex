@@ -1,0 +1,203 @@
+%% DRAFT -- SimulacraBench technical report (template: SimulacraBench Technical Report Template).
+%% Every number in this draft comes from local runs on the synthetic sandbox (see results/*.jsonl).
+%% Section 3.1 must be filled with the official Codabench numbers before submission (red TODOs).
+\documentclass{article}
+\usepackage[final]{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{enumitem}
+
+\newcommand{\teamid}{\textcolor{red}{TODO: TEAM ID (as on codabench leaderboard)}}
+\newcommand{\todo}[1]{\textcolor{red}{TODO: #1}}
+\newcommand{\cbox}{$\square$}
+\newcommand{\cboxchecked}{$\boxtimes$}
+
+\title{SimulacraBench Technical Report:\\ Cross-Validated Stacking of Multi-Task Networks and Count Backoff}
+
+\author{%
+  Longtao Wu\\
+  \todo{Affiliation}\\
+  \texttt{\todo{email}}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\begin{tabular}{l}
+\toprule
+\textbf{Team ID:} \teamid \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{abstract}
+Held-out respondents reveal only their always-visible \textsc{given} block, so every scored cell is a draw from $p(\text{answer}\mid\textsc{given})$, gate sentinel included. We fit this conditional distribution entirely inside \texttt{predict()} on the visible rows, with no pretrained model and no external data. Four candidate predictors -- the crowd marginal, a Dirichlet count backoff, multi-task softmax regression and three multi-task MLPs with one softmax head per item -- produce out-of-fold probabilities by 5-fold cross-validation; a per-item convex mixture, shrunk towards a shared mixture, is fitted to the out-of-fold log score with the grader's probability floor applied. Skip-logic rules that hold without exception on the visible rows are then imposed exactly. Every choice that could overfit is made by cross-validation on the delivered data rather than tuned on the synthetic sandbox. Test-phase skill: \todo{test score}.
+\end{abstract}
+
+%% ---------------------------------------------------------------------------
+\section{Method summary}
+\label{sec:method}
+
+\subsection{Method type}
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{@{}clcl@{}}
+    \toprule
+    \cbox & LLM-simulated respondents (prompting, personas) & \cbox & Fine-tuned language model \\
+    \cbox & Tabular / conditional generative model & \cboxchecked & Supervised prediction (GBDT, neural net, linear/GLM) \\
+    \cboxchecked & Bayesian / hierarchical / multilevel model & \cbox & Small-area estimation or post-stratification \\
+    \cbox & Reweighting, raking, or calibration of the released sample & \cbox & Imputation / matching / nearest-neighbour \\
+    \cbox & Retrieval over released or external microdata & \cbox & Agent-based or mechanistic simulation \\
+    \cboxchecked & Ensemble or stacking of multiple components & \cboxchecked & Other: deterministic skip-logic rules \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+\noindent Supervised prediction: multi-task softmax regression and MLPs. Hierarchical: Dirichlet backoff from the marginal to one- and two-column strata. Stacking: per-item convex mixture fitted on out-of-fold log score. Rules: gate sentinels decided by a visible parent.
+
+\subsection{Pipeline}
+\label{sec:pipeline}
+For each instrument, \texttt{predict(frame, schema)} (i) encodes every \textsc{given} column one-hot (the gate sentinel is its own level); (ii) splits the visible rows into $F{=}5$ folds; (iii) on each fold fits M1--M5 below on the other folds and predicts the held-out fold and all hidden rows; (iv) fits the stacking weights on the out-of-fold probabilities; (v) averages the $F$ fold models' hidden-row predictions for the networks, refits M0/M1 on all visible rows, and mixes; (vi) imposes verified gate rules; (vii) returns one vector per blank cell in canonical order (rows top to bottom, items in schema order). The count backoff is the one in the organizers' \texttt{external\_model} baseline with a uniform base measure~\citep{sbstarter}.
+
+\subsection{Inputs and feature construction}
+Only the \textsc{given} block is used, because it is the only information visible for a held-out respondent; visible respondents' \textsc{predict} answers are used as training labels. Question wording is not used (see Limitations). Each \textsc{predict} item's label space is its option list plus the gate sentinel when the item is gated, exactly the scored vector.
+
+\subsection{Model or simulator}
+\textbf{M0} crowd marginal (counts $+\tfrac12$). \textbf{M1} Dirichlet backoff: marginal $\to$ stratum of the most informative \textsc{given} column $\to$ the two most informative columns (plug-in mutual information), $\alpha{=}2$ pseudo-counts per level. \textbf{M2} multi-task softmax regression: one linear layer from the one-hot \textsc{given} vector to all items' logits, padded to the widest item and masked. \textbf{M3--M5} multi-task MLPs sharing hidden layers across all items of an instrument: $[256,256]$ GELU, dropout 0.3; $[512]$, dropout 0.5; $[256,128,128]$, dropout 0.2. Loss: mean over items of the categorical cross-entropy. Items are treated as conditionally independent given \textsc{given}, which is exact for the metric: every cell is scored by its own marginal log score.
+
+\subsection{Fitting, training, or prompting}
+All fitting happens at prediction time on the visible rows of the phase (\textsc{train} in development, \textsc{train}+\textsc{dev} in the final phase). Networks: AdamW (lr $10^{-2}$ linear, $1$--$2\times10^{-3}$ MLPs, weight decay $10^{-4}$--$10^{-3}$), minibatch 256--512, up to 60--80 epochs; \emph{per item}, the epoch with the lowest validation loss on the fold is kept (patience 6--8 epochs without any item improving). Seeds are fixed.
+
+\subsection{Prediction and aggregation}
+With $P_m(i,j)$ the out-of-fold probability model $m$ gives respondent $i$'s true answer to item $j$, the mixture weights $w_j=\mathrm{softmax}(b+a_j)$ maximise
+$\frac1{NJ}\sum_{i,j}\log\big(\varepsilon+(1-K_j\varepsilon)\sum_m w_{jm}P_m(i,j)\big)-\lambda\,\overline{a^2}$, $\varepsilon{=}10^{-3}$, $\lambda{=}0.05$ (400 Adam steps), so items with little evidence fall back on the shared mixture $b$.
+
+\subsection{Post-processing and calibration (if applicable)}
+For gated items whose gate is decided by visible data (a \textsc{given} parent, or a chain closed by one), the rule ``closed $\Rightarrow$ sentinel, open $\Rightarrow$ not sentinel'' is imposed only if it holds for every visible respondent (and at least 20 are covered). Calibration towards the crowd is the stacking weight on M0; the grader's own floor mixing is applied after.
+
+%% ---------------------------------------------------------------------------
+\section{Models, data, and compute}
+\label{sec:resources}
+
+\paragraph{Pretrained models and off-the-shelf components.} None (Table~\ref{tab:models}).
+\begin{table}[h]
+  \centering
+  \caption{Pretrained models and off-the-shelf components.}
+  \label{tab:models}
+  \begin{tabular}{lll}
+    \toprule
+    Component & Version / checkpoint & Role in pipeline  \\
+    \midrule
+    None & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Data.} Development used only the starter kit's schemas and synthetic sandbox (official generator, and a second generator of ours with direct \textsc{given} effects, a country$\times$covariate interaction and three latent traits, used to check that the pipeline does not depend on the official sandbox's single-trait structure). The submitted code sees only the delivered frame. No external data (Table~\ref{tab:external}).
+\begin{table}[h]
+  \centering
+  \caption{External datasets used.}
+  \label{tab:external}
+  \begin{tabular}{llll}
+    \toprule
+    Dataset & Source / URL & Size & Use in pipeline \\
+    \midrule
+    None & -- & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Compute.} All three instruments together took 164\,s of wall clock on one A800-80GB in our dry run of phase 1 on the sandbox (178\,s for phase 2), inside the 900\,s / 3600\,s budgets.
+
+%% ---------------------------------------------------------------------------
+\section{Results}
+\label{sec:results}
+
+\subsection{Test-phase leaderboard results}
+\begin{table}[h]
+  \centering
+  \caption{Official SimulacraBench results for team \teamid (skill; crowd marginal $=0$, perfect $=1$).}
+  \label{tab:results}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Split & Mean skill & UNICEF & World Bank & UNHCR \\
+    \midrule
+    Development (noised) & \todo{} & \todo{} & \todo{} & \todo{} \\
+    Test        & \todo{} & \todo{} & \todo{} & \todo{} \\
+    Organizer baseline (crowd marginal) & 0.000 & 0.000 & 0.000 & 0.000 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Breakdown by population, survey, or question type}
+The leaderboard reports one skill per instrument (Table~\ref{tab:results}). For orientation only, Table~\ref{tab:sandbox} gives exact (un-noised) local skills on synthetic data, which carry no information about the real instruments: the sandbox answers are invented.
+
+\begin{table}[h]
+  \centering
+  \small
+  \caption{Local skill on synthetic sandbox data, phase-1 split (\textsc{train} visible, \textsc{dev} scored). Not leaderboard numbers.}
+  \label{tab:sandbox}
+  \begin{tabular}{llrrrr}
+    \toprule
+    Sandbox & Method & Mean & UNICEF & World Bank & UNHCR \\
+    \midrule
+    official & crowd marginal & 0.000 & 0.000 & 0.000 & 0.000 \\
+    official & count backoff (organizer baseline, no LLM) & 0.253 & 0.374 & 0.237 & 0.148 \\
+    official & ours (M0--M5, stacked) & 0.308 & 0.404 & 0.285 & 0.236 \\
+    ours (3 traits, direct effects) & crowd marginal & 0.000 & 0.000 & 0.000 & 0.000 \\
+    ours (3 traits, direct effects) & count backoff & 0.179 & 0.310 & 0.175 & 0.052 \\
+    ours (3 traits, direct effects) & ours (M0--M5, stacked) & 0.278 & 0.361 & 0.282 & 0.190 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+%% ---------------------------------------------------------------------------
+\section{Reproducibility}
+\label{sec:repro}
+\begin{itemize}[leftmargin=*]
+  \item Code repository: \todo{https://github.com/...} (licence: MIT). The submission is \texttt{submissions/v3\_ens/main.py}, a single file with no requirements beyond the hosted image (numpy, pandas, torch).
+  \item Commit hash used for the test-phase submission: \todo{hash}.
+  \item Reproduce: \texttt{cd submissions/v3\_ens \&\& zip -r ../../final.zip .}; local scoring with \texttt{python tools/eval\_local.py --submission submissions/v3\_ens}.
+  \item Environment: Python 3.13 hosted image; local runs used Python 3.11/3.13, torch 2.5.1/2.15, pandas 2.2/3.1.
+  \item Pretrained weights: none.
+\end{itemize}
+
+%% ---------------------------------------------------------------------------
+\section{Limitations}
+\label{sec:limitations}
+The method only knows what the \textsc{given} block reveals; it cannot learn anything about subgroups that are rare in the visible rows beyond what the shared hidden layers and the shrinkage to the crowd provide. It ignores question wording, so it cannot improve on rare answer options from world knowledge. Sandbox scores are not evidence about the real instruments.
+
+\begin{thebibliography}{1}
+\bibitem[{SimulacraBench organizers}(2026)]{sbstarter}
+SimulacraBench organizers.
+\newblock SimulacraBench starter kit.
+\newblock \url{https://github.com/SituatedEvals/public}, 2026.
+\end{thebibliography}
+
+\clearpage
+\appendix
+\section{Full configuration}
+\begin{itemize}[leftmargin=*]
+  \item Folds $F{=}5$, fold seed 0; network seeds $17f$ for fold $f$.
+  \item M2: no hidden layer, lr $10^{-2}$, wd $10^{-4}$, batch 512, $\le$60 epochs, patience 6.
+  \item M3: $[256,256]$, dropout 0.3, lr $2\times10^{-3}$, wd $10^{-4}$, batch 256, $\le$60 epochs, patience 6.
+  \item M4: $[512]$, dropout 0.5, lr $2\times10^{-3}$, wd $10^{-3}$, batch 256, $\le$60 epochs, patience 6.
+  \item M5: $[256,128,128]$, dropout 0.2, lr $10^{-3}$, wd $10^{-4}$, batch 256, $\le$80 epochs, patience 8.
+  \item Stacking: $\lambda{=}0.05$, Adam lr 0.05, 400 steps, float64.
+  \item Time guard: if a call exceeds 240\,s (or 650\,s since import), remaining fold models are skipped.
+\end{itemize}
+
+\end{document}

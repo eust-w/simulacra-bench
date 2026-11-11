@@ -1,0 +1,7 @@
+.venv/
+env/
+deploy/
+starter-kit/
+__pycache__/
+*.pyc
+writeup/template_download/
