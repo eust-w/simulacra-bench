@@ -5,3 +5,4 @@ starter-kit/
 __pycache__/
 *.pyc
 writeup/template_download/
+writeup/png/

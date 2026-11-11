@@ -54,7 +54,8 @@ Held-out respondents reveal only their always-visible \textsc{given} block, so e
 \subsection{Method type}
 \begin{table}[h]
   \centering
-  \small
+  \scriptsize
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{@{}clcl@{}}
     \toprule
     \cbox & LLM-simulated respondents (prompting, personas) & \cbox & Fine-tuned language model \\
@@ -64,7 +65,7 @@ Held-out respondents reveal only their always-visible \textsc{given} block, so e
     \cbox & Retrieval over released or external microdata & \cbox & Agent-based or mechanistic simulation \\
     \cboxchecked & Ensemble or stacking of multiple components & \cboxchecked & Other: deterministic skip-logic rules \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 \noindent Supervised prediction: multi-task softmax regression and MLPs. Hierarchical: Dirichlet backoff from the marginal to one- and two-column strata. Stacking: per-item convex mixture fitted on out-of-fold log score. Rules: gate sentinels decided by a visible parent.
 
@@ -150,6 +151,7 @@ The leaderboard reports one skill per instrument (Table~\ref{tab:results}). For 
   \small
   \caption{Local skill on synthetic sandbox data, phase-1 split (\textsc{train} visible, \textsc{dev} scored). Not leaderboard numbers.}
   \label{tab:sandbox}
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{llrrrr}
     \toprule
     Sandbox & Method & Mean & UNICEF & World Bank & UNHCR \\
@@ -161,7 +163,7 @@ The leaderboard reports one skill per instrument (Table~\ref{tab:results}). For 
     ours (3 traits, direct effects) & count backoff & 0.179 & 0.310 & 0.175 & 0.052 \\
     ours (3 traits, direct effects) & ours (M0--M5, stacked) & 0.278 & 0.361 & 0.282 & 0.190 \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 %% ---------------------------------------------------------------------------
@@ -178,7 +180,7 @@ The leaderboard reports one skill per instrument (Table~\ref{tab:results}). For 
 %% ---------------------------------------------------------------------------
 \section{Limitations}
 \label{sec:limitations}
-The method only knows what the \textsc{given} block reveals; it cannot learn anything about subgroups that are rare in the visible rows beyond what the shared hidden layers and the shrinkage to the crowd provide. It ignores question wording, so it cannot improve on rare answer options from world knowledge. Sandbox scores are not evidence about the real instruments.
+The method only knows what the \textsc{given} block reveals; it cannot learn anything about subgroups that are rare in the visible rows beyond what the shared hidden layers and the shrinkage to the crowd provide. It ignores question wording, so it cannot improve on rare answer options from world knowledge. Sandbox scores are not evidence about the real instruments.\label{end-of-main}
 
 \begin{thebibliography}{1}
 \bibitem[{SimulacraBench organizers}(2026)]{sbstarter}
