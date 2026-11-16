@@ -1,8 +1,13 @@
 %% DRAFT -- SimulacraBench technical report (template: SimulacraBench Technical Report Template).
 %% Every number in this draft comes from local runs on the synthetic sandbox (see results/*.jsonl).
-%% Section 3.1 must be filled with the official Codabench numbers before submission (red TODOs).
+%% Official Codabench numbers filled 2026-11-16: Development (noised) 0.48 / 0.35 / 0.23 / 0.85 (1050161); Test 0.48 / 0.34 / 0.23 / 0.85 (1053654).
 \documentclass{article}
 \usepackage[final]{neurips_2026}
+\makeatletter
+\@ifundefined{@trackname}{%
+  \newcommand{\@trackname}{SimulacraBench Competition at the \@neuripsordinal\ Conference on Neural Information Processing Systems (NeurIPS \@neuripsyear).}%
+}{}
+\makeatother
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -18,7 +23,7 @@
 \usepackage{graphicx}
 \usepackage{enumitem}
 
-\newcommand{\teamid}{\textcolor{red}{TODO: TEAM ID (as on codabench leaderboard)}}
+\newcommand{\teamid}{eustancewu}
 \newcommand{\todo}[1]{\textcolor{red}{TODO: #1}}
 \newcommand{\cbox}{$\square$}
 \newcommand{\cboxchecked}{$\boxtimes$}
@@ -44,7 +49,7 @@
 \end{center}
 
 \begin{abstract}
-Held-out respondents reveal only their always-visible \textsc{given} block, so every scored cell is a draw from $p(\text{answer}\mid\textsc{given})$, gate sentinel included. We fit this conditional distribution entirely inside \texttt{predict()} on the visible rows, with no pretrained model and no external data. Four candidate predictors -- the crowd marginal, a Dirichlet count backoff, multi-task softmax regression and three multi-task MLPs with one softmax head per item -- produce out-of-fold probabilities by 5-fold cross-validation; a per-item convex mixture, shrunk towards a shared mixture, is fitted to the out-of-fold log score with the grader's probability floor applied. Skip-logic rules that hold without exception on the visible rows are then imposed exactly. Every choice that could overfit is made by cross-validation on the delivered data rather than tuned on the synthetic sandbox. Test-phase skill: \todo{test score}.
+Held-out respondents reveal only their always-visible \textsc{given} block, so every scored cell is a draw from $p(\text{answer}\mid\textsc{given})$, gate sentinel included. We fit this conditional distribution entirely inside \texttt{predict()} on the visible rows, with no pretrained model and no external data. Four candidate predictors -- the crowd marginal, a Dirichlet count backoff, multi-task softmax regression and three multi-task MLPs with one softmax head per item -- produce out-of-fold probabilities by 5-fold cross-validation; a per-item convex mixture, shrunk towards a shared mixture, is fitted to the out-of-fold log score with the grader's probability floor applied. Skip-logic rules that hold without exception on the visible rows are then imposed exactly. Every choice that could overfit is made by cross-validation on the delivered data rather than tuned on the synthetic sandbox. Test-phase skill: 0.48.
 \end{abstract}
 
 %% ---------------------------------------------------------------------------
@@ -130,14 +135,14 @@ For gated items whose gate is decided by visible data (a \textsc{given} parent, 
 \subsection{Test-phase leaderboard results}
 \begin{table}[h]
   \centering
-  \caption{Official SimulacraBench results for team \teamid (skill; crowd marginal $=0$, perfect $=1$).}
+  \caption{Official SimulacraBench results for team \teamid{} (skill; crowd marginal $=0$, perfect $=1$).}
   \label{tab:results}
   \begin{tabular}{lrrrr}
     \toprule
     Split & Mean skill & UNICEF & World Bank & UNHCR \\
     \midrule
-    Development (noised) & \todo{} & \todo{} & \todo{} & \todo{} \\
-    Test        & \todo{} & \todo{} & \todo{} & \todo{} \\
+    Development (noised) & 0.48 & 0.35 & 0.23 & 0.85 \\
+    Test        & 0.48 & 0.34 & 0.23 & 0.85 \\
     Organizer baseline (crowd marginal) & 0.000 & 0.000 & 0.000 & 0.000 \\
     \bottomrule
   \end{tabular}
@@ -171,7 +176,7 @@ The leaderboard reports one skill per instrument (Table~\ref{tab:results}). For 
 \label{sec:repro}
 \begin{itemize}[leftmargin=*]
   \item Code repository: \url{https://github.com/eust-w/simulacra-bench} (licence: MIT). The submission is \texttt{submissions/v3\_ens/main.py}, a single file with no requirements beyond the hosted image (numpy, pandas, torch).
-  \item Commit hash used for the test-phase submission: \todo{hash}.
+  \item Commit hash used for the test-phase submission: \texttt{b551b05dbd19920c9324bfbc7b3fe754e25c5934}.
   \item Reproduce: \texttt{cd submissions/v3\_ens \&\& zip -r ../../final.zip .}; local scoring with \texttt{python tools/eval\_local.py --submission submissions/v3\_ens}.
   \item Environment: Python 3.13 hosted image; local runs used Python 3.11/3.13, torch 2.5.1/2.15, pandas 2.2/3.1.
   \item Pretrained weights: none.
